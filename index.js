@@ -58,8 +58,36 @@ const configuration_workflow = () =>
       },
     ],
   });
-
-const run = async (table_id, viewname, {}, state, extraArgs) => {
+const typeToJsGridType = (t, field) => {
+  var jsgField = { name: field.name, title: field.label };
+  if (t.name === "String" && field.attributes && field.attributes.options) {
+    jsgField.type = "select";
+    jsgField.items = field.attributes.options.split(",").map((o) => o.trim());
+    if (!field.required) jsgField.items.unshift("");
+  } else if (t === "Key" || t === "File") {
+    jsgField.type = "select";
+    //console.log(field.options);
+    jsgField.items = field.options;
+    jsgField.valueField = "value";
+    jsgField.textField = "label";
+  } else
+    jsgField.type =
+      t.name === "String"
+        ? "text"
+        : t.name === "Integer"
+        ? "number"
+        : t.name === "Float"
+        ? "decimal"
+        : t.name === "Bool"
+        ? "checkbox"
+        : t.name === "Color"
+        ? "color"
+        : t.name === "Date"
+        ? "date"
+        : "text";
+  return jsgField;
+};
+const run = async (table_id, viewname, { columns }, state, extraArgs) => {
   const table = await Table.findOne({ id: table_id });
   const fields = await table.getFields();
   readState(state, fields);
@@ -67,12 +95,30 @@ const run = async (table_id, viewname, {}, state, extraArgs) => {
     if (f.type === "File") f.attributes = { select_file_where: {} };
     await f.fill_fkey_options();
   }
+  const tfields = get_viewable_fields(
+    viewname,
+    table,
+    fields,
+    columns,
+    false,
+    extraOpts.req.csrfToken()
+  );
+  const { id, ...state } = stateWithId || {};
+  const qstate = await stateFieldsToWhere({ fields, state });
+  const rows_per_page = 20;
+  const current_page = parseInt(state._page) || 1;
+  const rows = await table.getJoinedRows({
+    where: qstate,
+    joinFields,
+    aggregations,
+    limit: rows_per_page,
+    offset: (current_page - 1) * rows_per_page,
+    ...(state._sortby && state._sortby !== "undefined"
+      ? { orderBy: state._sortby }
+      : { orderBy: "id" }),
+  });
 
-  //console.log(fields);
-  const keyfields = fields
-    .filter((f) => f.type === "Key" || f.type === "File")
-    .map((f) => f.name);
-  const jsfields = fields.map((f) => typeToJsGridType(f.type, f));
+  const jsfields = tfields.map((f) => typeToJsGridType(f));
 
   jsfields.push({ type: "control" });
   return [
@@ -85,12 +131,7 @@ const run = async (table_id, viewname, {}, state, extraArgs) => {
                 autoload: true,
                 inserting: true,
                 editing: true,
-                         
-                controller: 
-                  jsgrid_controller("${table.name}", ${JSON.stringify(
-        table.versioned
-      )}, ${JSON.stringify(keyfields)}),
-         
+                data: ${JSON.stringify(rows)}
                 fields: edit_fields
             });
          `)
@@ -132,35 +173,7 @@ const headers = [
       "sha512-OtwMKauYE8gmoXusoKzA/wzQoh7WThXJcJVkA29fHP58hBF7osfY0WLCIZbwkeL9OgRCxtAfy17Pn3mndQ4PZQ==",
   },
 ];
-const typeToJsGridType = (t, field) => {
-  var jsgField = { name: field.name, title: field.label };
-  if (t.name === "String" && field.attributes && field.attributes.options) {
-    jsgField.type = "select";
-    jsgField.items = field.attributes.options.split(",").map((o) => o.trim());
-    if (!field.required) jsgField.items.unshift("");
-  } else if (t === "Key" || t === "File") {
-    jsgField.type = "select";
-    //console.log(field.options);
-    jsgField.items = field.options;
-    jsgField.valueField = "value";
-    jsgField.textField = "label";
-  } else
-    jsgField.type =
-      t.name === "String"
-        ? "text"
-        : t.name === "Integer"
-        ? "number"
-        : t.name === "Float"
-        ? "decimal"
-        : t.name === "Bool"
-        ? "checkbox"
-        : t.name === "Color"
-        ? "color"
-        : t.name === "Date"
-        ? "date"
-        : "text";
-  return jsgField;
-};
+
 const get_state_fields = () => [];
 module.exports = {
   sc_plugin_api_version: 1,
