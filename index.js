@@ -103,7 +103,7 @@ const run = async (table_id, viewname, { columns }, state, extraArgs) => {
     false,
     extraOpts.req.csrfToken()
   );
-  const { id, ...state } = stateWithId || {};
+
   const qstate = await stateFieldsToWhere({ fields, state });
   const rows_per_page = 20;
   const current_page = parseInt(state._page) || 1;
