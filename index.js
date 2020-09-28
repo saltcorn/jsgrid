@@ -2,18 +2,14 @@ const Field = require("@saltcorn/data/models/field");
 const Table = require("@saltcorn/data/models/table");
 const Form = require("@saltcorn/data/models/form");
 const Workflow = require("@saltcorn/data/models/workflow");
-const FieldRepeat = require("../../models/fieldrepeat");
-const { removeEmptyStrings } = require("../../utils");
+const FieldRepeat = require("@saltcorn/data/models/fieldrepeat");
 const {
   field_picker_fields,
   picked_fields_to_query,
   stateFieldsToWhere,
   initial_config_all_fields,
-} = require("../../plugin-helper");
-const {
-  get_viewable_fields,
-  stateToQueryString,
-} = require("./viewable_fields");
+} = require("@saltcorn/data/plugin-helper");
+
 const {
   text,
   div,
@@ -77,13 +73,10 @@ const run = async (table_id, viewname, {}, state, extraArgs) => {
     .filter((f) => f.type === "Key" || f.type === "File")
     .map((f) => f.name);
   const jsfields = fields.map((f) => typeToJsGridType(f.type, f));
-  if (table.versioned) {
-    jsfields.push({ name: "_versions", title: "Versions", type: "versions" });
-  }
+
   jsfields.push({ type: "control" });
   return [
     script(`var edit_fields=${JSON.stringify(jsfields)};`),
-    script(domReady(versionsField(table.name))),
     script(
       domReady(`$("#jsGrid").jsGrid({
                 width: "100%",
@@ -139,7 +132,36 @@ const headers = [
       "sha512-OtwMKauYE8gmoXusoKzA/wzQoh7WThXJcJVkA29fHP58hBF7osfY0WLCIZbwkeL9OgRCxtAfy17Pn3mndQ4PZQ==",
   },
 ];
-
+const typeToJsGridType = (t, field) => {
+  var jsgField = { name: field.name, title: field.label };
+  if (t.name === "String" && field.attributes && field.attributes.options) {
+    jsgField.type = "select";
+    jsgField.items = field.attributes.options.split(",").map((o) => o.trim());
+    if (!field.required) jsgField.items.unshift("");
+  } else if (t === "Key" || t === "File") {
+    jsgField.type = "select";
+    //console.log(field.options);
+    jsgField.items = field.options;
+    jsgField.valueField = "value";
+    jsgField.textField = "label";
+  } else
+    jsgField.type =
+      t.name === "String"
+        ? "text"
+        : t.name === "Integer"
+        ? "number"
+        : t.name === "Float"
+        ? "decimal"
+        : t.name === "Bool"
+        ? "checkbox"
+        : t.name === "Color"
+        ? "color"
+        : t.name === "Date"
+        ? "date"
+        : "text";
+  return jsgField;
+};
+const get_state_fields = () => [];
 module.exports = {
   sc_plugin_api_version: 1,
   headers,
